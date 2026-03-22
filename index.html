@@ -194,6 +194,33 @@ function redrawTree() {
     f3EditTree.setNoEdit(); // Disable all click additions/edit popovers 
   }
 
+  // Find the top-most ancestor to set as default view (avoiding arbitrary filtering)
+  function getTopAncestor(id, visited = new Set()) {
+    if (visited.has(id)) return { depth: 0, topId: id };
+    visited.add(id);
+    
+    let person = currentData.find(d => d.id === id);
+    if (!person || !person.rels || !person.rels.parents || person.rels.parents.length === 0) {
+      return { depth: 0, topId: id };
+    }
+    
+    let maxD = -1;
+    let bestTop = id;
+    for (let pId of person.rels.parents) {
+      let res = getTopAncestor(pId, new Set(visited));
+      if (res.depth > maxD) {
+        maxD = res.depth;
+        bestTop = res.topId;
+      }
+    }
+    return { depth: maxD + 1, topId: bestTop };
+  }
+  
+  let topId = getTopAncestor(currentData[0].id).topId;
+  
+  // Set the top-most ancestor as the root
+  f3Chart.updateMainId(topId);
+
   f3Chart.updateTree({initial: true});
   
   // Update data reference so 'Save' captures latest chart state
