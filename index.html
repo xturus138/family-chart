@@ -143,11 +143,20 @@
     </div>
 
     <div class="control-group" style="padding: 15px; background: #333; border-radius: 6px; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
-      <h3 style="border-bottom: none; margin-bottom: 5px;">Link Built-In People</h3>
-      <p style="font-size: 11px; color: #aaa; margin-bottom: 15px; margin-top: 0;">Connect existing relatives to avoid duplicates (e.g. cousin marriage, adding existing parents).</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+        <h3 style="border-bottom: none; margin: 0;">Link Built-In People</h3>
+        <label style="font-size: 11px; cursor: pointer; color: #ccc; display: flex; align-items: center;">
+          <input type="checkbox" id="enableAutoLink" style="margin-right: 5px; accent-color: #2196F3;"> Auto-fill from Tree
+        </label>
+      </div>
+      <p style="font-size: 11px; color: #999; margin-bottom: 15px; margin-top: 0;">Connect existing relatives to avoid duplicates (e.g. cousin marriage, adding existing parents).</p>
       
       <div class="cs-wrapper" id="csPerson1" data-val="">
-        <div class="cs-display"><span class="cs-label">Select Person 1...</span><span class="cs-arrow">▼</span></div>
+        <div class="cs-display">
+          <span class="cs-label" style="flex-grow:1; overflow:hidden; text-overflow:ellipsis;">Select Person 1...</span>
+          <span class="cs-clear" style="display:none; color:#f44336; font-size:16px; line-height:1; font-weight:bold; margin-right:6px;" title="Clear">&times;</span>
+          <span class="cs-arrow">▼</span>
+        </div>
         <div class="cs-dropdown">
           <input type="text" class="cs-search" placeholder="Type to search...">
           <ul class="cs-list"></ul>
@@ -160,7 +169,11 @@
       </select>
       
       <div class="cs-wrapper" id="csPerson2" data-val="">
-        <div class="cs-display"><span class="cs-label">Select Person 2...</span><span class="cs-arrow">▼</span></div>
+        <div class="cs-display">
+          <span class="cs-label" style="flex-grow:1; overflow:hidden; text-overflow:ellipsis;">Select Person 2...</span>
+          <span class="cs-clear" style="display:none; color:#f44336; font-size:16px; line-height:1; font-weight:bold; margin-right:6px;" title="Clear">&times;</span>
+          <span class="cs-arrow">▼</span>
+        </div>
         <div class="cs-dropdown">
           <input type="text" class="cs-search" placeholder="Type to search...">
           <ul class="cs-list"></ul>
@@ -260,6 +273,8 @@ function setupCustomSelect(wrapperId, data) {
         li.addEventListener('click', () => {
           wrapper.dataset.val = p.id;
           label.textContent = name;
+          const clearBtn = wrapper.querySelector('.cs-clear');
+          if (clearBtn) clearBtn.style.display = 'inline-block';
           closeAll();
         });
         
@@ -274,6 +289,16 @@ function setupCustomSelect(wrapperId, data) {
 
   // Toggle dropdown
   display.addEventListener('click', (e) => {
+    // If clicking clear button
+    const clearBtn = wrapper.querySelector('.cs-clear');
+    if (e.target === clearBtn) {
+      e.stopPropagation();
+      wrapper.dataset.val = '';
+      label.textContent = wrapperId === 'csPerson1' ? 'Select Person 1...' : 'Select Person 2...';
+      clearBtn.style.display = 'none';
+      return;
+    }
+
     e.stopPropagation();
     const isOpen = display.dataset.open === "true";
     closeAll();
@@ -302,6 +327,56 @@ function closeAll() {
   document.querySelectorAll('.cs-display, .cs-dropdown').forEach(el => el.dataset.open = "false");
 }
 document.addEventListener('click', closeAll);
+
+// Makes canvas interactive for the Sidebar: Click a person on the tree to auto-fill the Link dropdowns!
+document.getElementById('FamilyChart')?.addEventListener('click', (e) => {
+  let node = e.target;
+  let d3Data = null;
+  // Traverse up to find the element that D3 natively bound data to
+  while (node && node !== document.body) {
+    if (node.__data__) {
+      d3Data = node.__data__;
+      break;
+    }
+    node = node.parentNode;
+  }
+  
+  if (d3Data && d3Data.data && d3Data.data.id) {
+    const id = d3Data.data.id;
+    const name = d3Data.data.data['first name'] || 'Unknown';
+    autoSelectLinkPerson(id, name);
+  }
+}, true); // Use capture phase so we catch it before any other popups block it
+
+function autoSelectLinkPerson(id, name) {
+  const enableAuto = document.getElementById('enableAutoLink');
+  if (!enableAuto || !enableAuto.checked) return;
+
+  const w1 = document.getElementById('csPerson1');
+  const w2 = document.getElementById('csPerson2');
+  if (!w1 || !w2) return;
+  
+  const fill = (wrapper) => {
+    wrapper.dataset.val = id;
+    wrapper.querySelector('.cs-label').textContent = name;
+    
+    const clearBtn = wrapper.querySelector('.cs-clear');
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+
+    const display = wrapper.querySelector('.cs-display');
+    display.style.transition = '0s';
+    display.style.backgroundColor = '#4CAF50';
+    setTimeout(() => {
+      display.style.transition = 'background 0.8s';
+      display.style.backgroundColor = '';
+    }, 50);
+  };
+
+  // If first is empty or they are both filled (overwrite second)
+  if (!w1.dataset.val) fill(w1);
+  else if (!w2.dataset.val && w1.dataset.val !== id) fill(w2);
+  else if (w1.dataset.val && w2.dataset.val && w1.dataset.val !== id) fill(w2);
+}
 
 document.getElementById('applyLinkBtn')?.addEventListener('click', () => {
   const wrapper1 = document.getElementById('csPerson1');
