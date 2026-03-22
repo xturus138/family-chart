@@ -85,6 +85,31 @@
       position: relative;
     }
     
+    /* Custom Searchable Dropdown */
+    .cs-wrapper { position: relative; width: 100%; margin-bottom: 12px; font-family: inherit; user-select: none; }
+    .cs-display { padding: 10px 12px; background: #222; border: 1px solid #444; border-radius: 4px; color: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; transition: border-color 0.2s, background 0.2s; }
+    .cs-display:hover { background: #2a2a2a; border-color: #666; }
+    .cs-display[data-open="true"] { border-color: #2196F3; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+    .cs-display .cs-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cs-display .cs-arrow { font-size: 10px; color: #888; transition: transform 0.2s; }
+    .cs-display[data-open="true"] .cs-arrow { transform: rotate(180deg); }
+    
+    .cs-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #252526; border: 1px solid #444; border-top: none; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; display: none; z-index: 1000; box-shadow: 0 8px 16px rgba(0,0,0,0.6); }
+    .cs-dropdown[data-open="true"] { display: block; }
+    .cs-search { width: 100%; box-sizing: border-box; padding: 10px 12px; background: #1e1e1e; border: none; border-bottom: 1px solid #333; color: #fff; font-size: 13px; outline: none; }
+    .cs-search::placeholder { color: #666; }
+    .cs-list { max-height: 200px; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+    .cs-list::-webkit-scrollbar { width: 6px; }
+    .cs-list::-webkit-scrollbar-track { background: #1e1e1e; }
+    .cs-list::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    .cs-list::-webkit-scrollbar-thumb:hover { background: #666; }
+    .cs-option { padding: 10px 12px; font-size: 13px; color: #ccc; cursor: pointer; display: flex; align-items: center; transition: background 0.1s; border-bottom: 1px solid #2a2a2a; }
+    .cs-option.hidden { display: none; }
+    .cs-option:hover { background: #2a2d3e; color: #fff; }
+    .cs-option:last-child { border-bottom: none; }
+    .cs-option img { width: 24px; height: 24px; border-radius: 50%; margin-right: 10px; background: #555; object-fit: cover; }
+    .cs-option .empty-avatar { display: inline-block; width: 24px; height: 24px; border-radius: 50%; margin-right: 10px; background: #444; line-height:24px; text-align:center; font-size:10px; color:#aaa; font-weight: bold;}
+    
     #FamilyChart {
       width: 100%;
       height: 100%;
@@ -121,14 +146,26 @@
       <h3 style="border-bottom: none; margin-bottom: 5px;">Link Built-In People</h3>
       <p style="font-size: 11px; color: #aaa; margin-bottom: 15px; margin-top: 0;">Connect existing relatives to avoid duplicates (e.g. cousin marriage, adding existing parents).</p>
       
-      <select id="linkPerson1" style="width: 100%; margin-bottom: 10px; padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></select>
+      <div class="cs-wrapper" id="csPerson1" data-val="">
+        <div class="cs-display"><span class="cs-label">Select Person 1...</span><span class="cs-arrow">▼</span></div>
+        <div class="cs-dropdown">
+          <input type="text" class="cs-search" placeholder="Type to search...">
+          <ul class="cs-list"></ul>
+        </div>
+      </div>
       
-      <select id="linkType" style="width: 100%; margin-bottom: 10px; padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;">
+      <select id="linkType" style="width: 100%; margin-bottom: 12px; padding: 10px 12px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; outline: none; cursor: pointer; font-size: 13px;">
         <option value="parents">is Child of</option>
         <option value="spouses">is Spouse of</option>
       </select>
       
-      <select id="linkPerson2" style="width: 100%; margin-bottom: 15px; padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></select>
+      <div class="cs-wrapper" id="csPerson2" data-val="">
+        <div class="cs-display"><span class="cs-label">Select Person 2...</span><span class="cs-arrow">▼</span></div>
+        <div class="cs-dropdown">
+          <input type="text" class="cs-search" placeholder="Type to search...">
+          <ul class="cs-list"></ul>
+        </div>
+      </div>
       
       <button id="applyLinkBtn" style="width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🔗 Create Link</button>
     </div>
@@ -183,27 +220,99 @@ fetch('api.php')
 
 
 function populateLinkDropdowns() {
-  const p1 = document.getElementById('linkPerson1');
-  const p2 = document.getElementById('linkPerson2');
-  if(!p1 || !p2) return;
-  p1.innerHTML = ''; p2.innerHTML = '';
-  
   const sorted = [...currentData].sort((a,b) => (a.data['first name'] || '').localeCompare(b.data['first name'] || ''));
-  sorted.forEach(p => {
-    p1.add(new Option(p.data['first name'] || 'Unknown', p.id));
-    p2.add(new Option(p.data['first name'] || 'Unknown', p.id));
-  });
+  setupCustomSelect('csPerson1', sorted);
+  setupCustomSelect('csPerson2', sorted);
 }
 
-document.getElementById('applyLinkBtn')?.addEventListener('click', () => {
-  const p1Menu = document.getElementById('linkPerson1');
-  const p2Menu = document.getElementById('linkPerson2');
-  if (!p1Menu || !p2Menu) return;
+function setupCustomSelect(wrapperId, data) {
+  const wrapper = document.getElementById(wrapperId);
+  if (!wrapper) return;
+  const display = wrapper.querySelector('.cs-display');
+  const label = wrapper.querySelector('.cs-label');
+  const dropdown = wrapper.querySelector('.cs-dropdown');
+  const search = wrapper.querySelector('.cs-search');
+  const list = wrapper.querySelector('.cs-list');
 
-  const id1 = p1Menu.value;
-  const id2 = p2Menu.value;
+  let debounceTimer;
+
+  const renderList = (filterText = '') => {
+    list.innerHTML = '';
+    const term = filterText.toLowerCase();
+    
+    let renderedCount = 0;
+    for (let i = 0; i < data.length; i++) {
+        if (renderedCount >= 50) break; // Limit UI DOM nodes for extreme performance
+        
+        const p = data[i];
+        const name = p.data['first name'] || 'Unknown';
+        
+        if (term !== '' && !name.toLowerCase().includes(term)) continue;
+
+        const avatarStr = p.data.avatar 
+          ? `<img src="${p.data.avatar}">` 
+          : `<div class="empty-avatar">${name.charAt(0).toUpperCase()}</div>`;
+          
+        const li = document.createElement('li');
+        li.className = 'cs-option';
+        li.innerHTML = `${avatarStr} <span>${name}</span>`;
+        
+        li.addEventListener('click', () => {
+          wrapper.dataset.val = p.id;
+          label.textContent = name;
+          closeAll();
+        });
+        
+        list.appendChild(li);
+        renderedCount++;
+    }
+    
+    if (renderedCount === 0) {
+      list.innerHTML = '<li class="cs-option" style="color:#777; justify-content:center; cursor:default; pointer-events:none;">No results found</li>';
+    }
+  };
+
+  // Toggle dropdown
+  display.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = display.dataset.open === "true";
+    closeAll();
+    if (!isOpen) {
+      display.dataset.open = "true";
+      dropdown.dataset.open = "true";
+      search.value = '';
+      renderList();
+      search.focus();
+    }
+  });
+
+  // Search filter with debounce buffer
+  search.addEventListener('input', (e) => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      renderList(e.target.value);
+    }, 100);
+  });
+
+  // Prevent closing when clicking inside dropdown
+  dropdown.addEventListener('click', e => e.stopPropagation());
+}
+
+function closeAll() {
+  document.querySelectorAll('.cs-display, .cs-dropdown').forEach(el => el.dataset.open = "false");
+}
+document.addEventListener('click', closeAll);
+
+document.getElementById('applyLinkBtn')?.addEventListener('click', () => {
+  const wrapper1 = document.getElementById('csPerson1');
+  const wrapper2 = document.getElementById('csPerson2');
+  if (!wrapper1 || !wrapper2) return;
+
+  const id1 = wrapper1.dataset.val;
+  const id2 = wrapper2.dataset.val;
   const type = document.getElementById('linkType').value;
   
+  if (!id1 || !id2) { alert("🚨 Please select both persons!"); return; }
   if (id1 === id2) { alert("🚨 Cannot link a person to themselves!"); return; }
   
   const p1 = currentData.find(d => d.id === id1);
