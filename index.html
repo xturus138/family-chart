@@ -3,12 +3,231 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>family-tree</title>
+  <title>Local Family Tree Builder</title>
+  <link rel="stylesheet" href="./src/styles/family-chart.css">
+  <style>
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      margin: 0;
+      padding: 0;
+      background-color: #1e1e1e; /* Darker workspace background */
+      color: #eaeaea;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    /* Left Sidebar Panel */
+    #sidebar {
+      width: 320px;
+      min-width: 320px;
+      background-color: #252526;
+      border-right: 1px solid #333;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+      z-index: 10;
+      overflow-y: auto;
+    }
+
+    #sidebar h3 {
+      font-size: 15px;
+      text-transform: uppercase;
+      margin: 0 0 15px 0;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+      color: #fff;
+    }
+
+    .control-group {
+      margin-bottom: 30px;
+    }
+
+    /* Toggle switches */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .toggle-row input {
+      margin-right: 10px;
+      transform: scale(1.2);
+      accent-color: #4CAF50;
+      cursor: pointer;
+    }
+
+    /* Save Button styling */
+    #exportBtn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px;
+      font-size: 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+      margin-top: auto;
+    }
+    #exportBtn:hover {
+      background: #45a049;
+    }
+
+    /* Main Chart Area */
+    #chart-container {
+      flex-grow: 1;
+      position: relative;
+    }
+    
+    #FamilyChart {
+      width: 100%;
+      height: 100%;
+      background-clip: padding-box;
+    }
+  </style>
+  <script src="https://unpkg.com/d3@7"></script>
+  <script src="./dist/family-chart.js"></script>
 </head>
 <body>
 
-<script>
-</script>
+  <!-- Left Sidebar Panel -->
+  <div id="sidebar">
+    <div class="control-group">
+      <h3>Detail Panel</h3>
+      
+      <label class="toggle-row">
+        <input type="checkbox" id="toggleDetailView" checked>
+        Enable Detail View
+      </label>
+      
+      <label class="toggle-row">
+        <input type="checkbox" id="toggleViewOnly">
+        View Only
+      </label>
+      
+      <label class="toggle-row">
+        <input type="checkbox" id="toggleEditFirst" checked>
+        Edit First (Open Form on Click)
+      </label>
+    </div>
 
+    <!-- We placed Save to DB button here at the bottom of the tools -->
+    <button id="exportBtn">💾 Save to Database</button>
+  </div>
+
+  <!-- Primary Wrapper for the Chart -->
+  <div id="chart-container">
+    <div id="FamilyChart" class="f3"></div>
+  </div>
+
+<script>
+let storeData = null;
+let currentData = null;
+
+// UI State
+let state = {
+  detailView: true,
+  viewOnly: false,
+  editFirst: true
+};
+
+// Listeners for Custom UI Sidebar
+document.getElementById('toggleDetailView').addEventListener('change', (e) => {
+  state.detailView = e.target.checked;
+  redrawTree();
+});
+document.getElementById('toggleViewOnly').addEventListener('change', (e) => {
+  state.viewOnly = e.target.checked;
+  redrawTree();
+});
+document.getElementById('toggleEditFirst').addEventListener('change', (e) => {
+  state.editFirst = e.target.checked;
+  redrawTree();
+});
+
+// Fetch Init Data
+fetch('api.php')
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+    currentData = data;
+    redrawTree();
+  })
+  .catch(err => console.error("Could not fetch from database. Ensure you are running on Laragon and not Vite.", err));
+
+
+function redrawTree() {
+  // Wipe the chart container clean so F3 can reinstantiate it with new settings
+  document.getElementById('FamilyChart').innerHTML = '';
+  
+  if (!currentData || currentData.length === 0) return;
+
+  const f3Chart = f3.createChart('#FamilyChart', currentData)
+    .setTransitionTime(600)
+    .setCardXSpacing(250)
+    .setCardYSpacing(150);
+
+  // Apply Detail View setting
+  const cardDisplaySettings = state.detailView 
+    ? [["first name"], ["avatar"]]   // Full detail (just Name & Avatar technically without bday)
+    : [["first name"]];              // Minimal detail
+
+  const f3Card = f3Chart.setCard(f3.CardHtml)
+    .setCardDisplay(cardDisplaySettings);
+
+  // Apply Editing logic settings
+  const f3EditTree = f3Chart.editTree()
+    .setFields(["first name", "avatar"])
+    .setEditFirst(state.editFirst)
+    .setCardClickOpen(f3Card);
+
+  if (state.viewOnly) {
+    f3EditTree.setNoEdit(); // Disable all click additions/edit popovers 
+  }
+
+  f3Chart.updateTree({initial: true});
+  
+  // Update data reference so 'Save' captures latest chart state
+  storeData = f3Chart.store.getData;
+}
+
+// Database Save Logic
+const exportBtn = document.getElementById('exportBtn');
+exportBtn.addEventListener('click', () => {
+  if (!storeData) return;
+  
+  exportBtn.innerHTML = "Saving...";
+  currentData = storeData(); // Sync the state to latest
+  const jsonStr = JSON.stringify(currentData);
+
+  fetch('api.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: jsonStr
+  })
+  .then(res => res.json())
+  .then(result => {
+    exportBtn.innerHTML = "✅ Saved Successfully!";
+    setTimeout(() => exportBtn.innerHTML = "💾 Save to Database", 2000);
+  })
+  .catch(err => {
+    console.error(err);
+    exportBtn.innerHTML = "❌ Failed to Save";
+    setTimeout(() => exportBtn.innerHTML = "💾 Save to Database", 2000);
+  });
+});
+
+</script>
 </body>
 </html>
