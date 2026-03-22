@@ -117,6 +117,22 @@
       </label>
     </div>
 
+    <div class="control-group" style="padding: 15px; background: #333; border-radius: 6px; box-shadow: inset 0 0 5px rgba(0,0,0,0.5);">
+      <h3 style="border-bottom: none; margin-bottom: 5px;">Link Built-In People</h3>
+      <p style="font-size: 11px; color: #aaa; margin-bottom: 15px; margin-top: 0;">Connect existing relatives to avoid duplicates (e.g. cousin marriage, adding existing parents).</p>
+      
+      <select id="linkPerson1" style="width: 100%; margin-bottom: 10px; padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></select>
+      
+      <select id="linkType" style="width: 100%; margin-bottom: 10px; padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;">
+        <option value="parents">is Child of</option>
+        <option value="spouses">is Spouse of</option>
+      </select>
+      
+      <select id="linkPerson2" style="width: 100%; margin-bottom: 15px; padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;"></select>
+      
+      <button id="applyLinkBtn" style="width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🔗 Create Link</button>
+    </div>
+
     <!-- We placed Save to DB button here at the bottom of the tools -->
     <button id="exportBtn">💾 Save to Database</button>
   </div>
@@ -160,9 +176,83 @@ fetch('api.php')
       return;
     }
     currentData = data;
+    populateLinkDropdowns();
     redrawTree();
   })
   .catch(err => console.error("Could not fetch from database. Ensure you are running on Laragon and not Vite.", err));
+
+
+function populateLinkDropdowns() {
+  const p1 = document.getElementById('linkPerson1');
+  const p2 = document.getElementById('linkPerson2');
+  if(!p1 || !p2) return;
+  p1.innerHTML = ''; p2.innerHTML = '';
+  
+  const sorted = [...currentData].sort((a,b) => (a.data['first name'] || '').localeCompare(b.data['first name'] || ''));
+  sorted.forEach(p => {
+    p1.add(new Option(p.data['first name'] || 'Unknown', p.id));
+    p2.add(new Option(p.data['first name'] || 'Unknown', p.id));
+  });
+}
+
+document.getElementById('applyLinkBtn')?.addEventListener('click', () => {
+  const p1Menu = document.getElementById('linkPerson1');
+  const p2Menu = document.getElementById('linkPerson2');
+  if (!p1Menu || !p2Menu) return;
+
+  const id1 = p1Menu.value;
+  const id2 = p2Menu.value;
+  const type = document.getElementById('linkType').value;
+  
+  if (id1 === id2) { alert("🚨 Cannot link a person to themselves!"); return; }
+  
+  const p1 = currentData.find(d => d.id === id1);
+  const p2 = currentData.find(d => d.id === id2);
+  if (!p1 || !p2) return;
+  
+  const ensureArray = (obj, key) => {
+    if (!obj.rels) obj.rels = {};
+    if (!obj.rels[key]) obj.rels[key] = [];
+    return obj.rels[key];
+  };
+
+  if (type === 'parents') {
+    const p1Parents = ensureArray(p1, 'parents');
+    const p2Children = ensureArray(p2, 'children');
+    if (!p1Parents.includes(id2)) p1Parents.push(id2);
+    if (!p2Children.includes(id1)) p2Children.push(id1);
+  } else if (type === 'spouses') {
+    const p1Spouses = ensureArray(p1, 'spouses');
+    const p2Spouses = ensureArray(p2, 'spouses');
+    if (!p1Spouses.includes(id2)) p1Spouses.push(id2);
+    if (!p2Spouses.includes(id1)) p2Spouses.push(id1);
+  }
+
+  // Strip out any auto-generated fake spouses before saving to DB
+  const cleanData = currentData.filter(d => !d.to_add);
+  const fakeIds = currentData.filter(d => d.to_add).map(d => d.id);
+  cleanData.forEach(d => {
+    if (d.rels.parents) d.rels.parents = d.rels.parents.filter(id => !fakeIds.includes(id));
+    if (d.rels.spouses) d.rels.spouses = d.rels.spouses.filter(id => !fakeIds.includes(id));
+    if (d.rels.children) d.rels.children = d.rels.children.filter(id => !fakeIds.includes(id));
+  });
+
+  const btn = document.getElementById('applyLinkBtn');
+  if (btn) btn.innerHTML = "Saving...";
+
+  const jsonStr = JSON.stringify(cleanData);
+  fetch('api.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: jsonStr })
+    .then(res => res.json())
+    .then(() => {
+      alert(`✅ Successfully linked ${p1.data['first name']} and ${p2.data['first name']}!\n\nThe page will now refresh to show the new connection.`);
+      location.reload();
+    })
+    .catch(e => {
+      console.error(e);
+      alert("Failed to save link!");
+      if (btn) btn.innerHTML = "🔗 Create Link";
+    });
+});
 
 
 function redrawTree() {

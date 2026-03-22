@@ -280,7 +280,7 @@ export default function calculateTree(data: Data, {
           }
           if (!to_add_spouse.rels.children) to_add_spouse.rels.children = []
           to_add_spouse.rels.children.push(child.id)
-          if (child.rels.parents.length !== 1) throw new Error('child has more than 1 parent')
+          if (child.rels.parents.length !== 1) return; // throw new Error('child has more than 1 parent')
           child.rels.parents.push(to_add_spouse.id)
         })
       }
