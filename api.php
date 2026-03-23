@@ -44,9 +44,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Wipe old relational data for a fresh clean state from the full tree payload
         $pdo->exec("DELETE FROM relations");
-        $pdo->exec("DELETE FROM people");
+        
+        $inputIds = array_column($input, 'id');
+        if (count($inputIds) > 0) {
+            $placeholders = implode(',', array_fill(0, count($inputIds), '?'));
+            $stmtDelete = $pdo->prepare("DELETE FROM people WHERE id NOT IN ($placeholders)");
+            $stmtDelete->execute($inputIds);
+        } else {
+            $pdo->exec("DELETE FROM people");
+        }
 
-        $stmtPerson = $pdo->prepare("INSERT INTO people (id, first_name, avatar, gender) VALUES (?, ?, ?, ?)");
+        $stmtPerson = $pdo->prepare("INSERT INTO people (id, first_name, avatar, gender) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE first_name=VALUES(first_name), avatar=VALUES(avatar), gender=VALUES(gender)");
         $stmtRel = $pdo->prepare("INSERT INTO relations (person_id, related_id, relation_type) VALUES (?, ?, ?)");
 
         foreach ($input as $node) {
